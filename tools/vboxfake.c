@@ -218,7 +218,19 @@ int ioctl(int fd, unsigned long req, ...) {
                 } *r = (typeof(r))arg;
                 long x = VBOX_COORD_MAX / 2, y = VBOX_COORD_MAX / 2;
                 FILE *pf = fopen(g_pos, "r");
-                if (pf) { long a, b; if (fscanf(pf, "%ld %ld", &a, &b) == 2) { x = a; y = b; } fclose(pf); }
+                if (pf) {
+                    /* SECURITY (SECURITY.md §4.1): only accept a ROOT-owned
+                     * position file. /tmp is world-writable, so a non-root
+                     * guest process (any app, uid defaultuser) could plant
+                     * .pos to bias touch coordinates. The legitimate flow
+                     * (tap.sh/swipe.sh) always writes .pos as root via SSH.
+                     * Mirrors the vts.cmd root-only check in vts.c. */
+                    struct stat pst;
+                    int posok = (fstat(fileno(pf), &pst) == 0 && pst.st_uid == 0);
+                    long a, b;
+                    if (posok && fscanf(pf, "%ld %ld", &a, &b) == 2) { x = a; y = b; }
+                    fclose(pf);
+                }
                 if (g_dbg) dbg("[vboxfake] GET -> x=%ld y=%ld\n", x, y);
                 if (x < 0) x = 0;
                 if (x > VBOX_COORD_MAX) x = VBOX_COORD_MAX;

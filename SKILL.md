@@ -32,9 +32,10 @@ logs, and verify the UI — without any physical phone or human in the loop.
 | `INPUT.md` | Verified tap/swipe recipes, coordinate math, traps, debugging |
 | `NETWORKING.md` | Emulator networking: topology, lockdown, port forwards |
 | `SECURITY.md` | Threat model, netlock, sandbox, input security, ops checklist |
+| `UNINSTALL.md` | Safe removal of the whole stack (dry-run by default) |
 | `TESTING.md` | UI verification workflow: screenshots, PIL, logs, phone-only items |
 | `QML-GOTCHAS.md` | Qt 5.6 / Silica pitfalls that cause white screens & dead taps |
-| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh` |
+| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh` |
 | `tools/` | Guest input-pipeline sources: `vboxfake.c`, `vts.c`, `patch_isa_note.py`, `sf-input-setup.sh`, `vts-link.sh` |
 | `apps/harbour-cpp/` | Minimal C++/QML test app (tap counter) to validate the pipeline |
 
@@ -53,6 +54,8 @@ logs, and verify the UI — without any physical phone or human in the loop.
    screenshot, inspect with PIL, read the app log (TESTING.md).
 5. **Fix & repeat** until the UI looks right; only then hand to the human
    for device acceptance (if a device is in scope).
+6. **Uninstall** (if the user asks to remove the whole stack):
+   `bash scripts/uninstall.sh` (dry-run) → `--yes` to execute. UNINSTALL.md.
 
 ## Environment knobs (all optional, env vars)
 

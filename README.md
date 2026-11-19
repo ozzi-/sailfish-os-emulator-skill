@@ -46,6 +46,8 @@ is already done and skips it).
 5. `tap.sh` / `swipe.sh` / screenshots / logs — verify the UI (`TESTING.md`)
 6. Iterate until the UI matches expectations → hand to a human for
    device acceptance (a real phone is still the final acceptance step)
+7. To remove everything again: `bash scripts/uninstall.sh` (dry-run first,
+   then `--yes`; see `UNINSTALL.md`)
 
 ## Contents
 
@@ -58,8 +60,9 @@ is already done and skips it).
 | `TESTING.md` | UI verification workflow (screenshots, PIL, logs) |
 | `NETWORKING.md` | Emulator network topology + internet-only lockdown |
 | `SECURITY.md` | Threat model, netlock, sandbox, input security, ops checklist |
+| `UNINSTALL.md` | Safe removal of the whole stack (dry-run by default) |
 | `QML-GOTCHAS.md` | Qt 5.6 / Silica pitfalls that cause white screens & dead taps |
-| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh` |
+| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh` |
 | `tools/` | Guest input-pipeline + netlock sources (C, shell, python) |
 | `apps/harbour-cpp/` | Minimal C++/QML tap-counter app to validate the pipeline |
 
@@ -70,6 +73,15 @@ reach the public internet but **not** the host LAN (blackhole routes), the
 input daemon accepts commands from root only, and the only custom code in a
 system process is a ~200-line `LD_PRELOAD` shim (auditable, limited scope —
 trade-off documented in `SECURITY.md §5`).
+
+## Uninstall
+
+`scripts/uninstall.sh` removes the whole stack — both VMs (strict name
+matching, no other VM on the host is ever touched), the `~/SailfishOS` SDK
+dir, the `sfdk` wrapper, the installer download, and optionally the distro
+packages (`--with-packages`) and the skill directory (`--with-skill`).
+**Dry-run by default** — it prints the plan with sizes and changes nothing
+until you pass `--yes`. Details and manual leftovers: `UNINSTALL.md`.
 
 ## Assumptions
 

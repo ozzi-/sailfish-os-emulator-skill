@@ -22,6 +22,13 @@ round-trips.
    JS errors, `ReferenceError`. Also grep the Wayland touch trace to prove
    the tap arrived at the right coordinates:
    `grep -E "wl_touch.*\.(down|motion|up)" /tmp/<app>.log | tail`
+   ⚠ **If `/tmp/<app>.log` is empty or stale, check the journal instead:**
+   `journalctl | grep <app> | tail -50`. When the session manager (sessiond)
+   adopts the launch, the app's stdout/stderr go to a socket, not your file
+   — the journal is then the only log. Also check for stray duplicates:
+   `pgrep <app>` may show multiple instances (manual launch + deploy.sh +
+   sessiond relaunch); the visible one and the input-receiving one can differ.
+   `pkill -9 <app>` and relaunch via `deploy.sh` before judging.
 5. **Report** to the human: what was verified, screenshots, issues found &
    fixed. Only then hand off for device acceptance (if in scope).
 
@@ -45,6 +52,7 @@ bash <skill>/scripts/swipe.sh X0 Y0 X1 Y1 [STEPS]
 
 # App log / running check / kill:
 S 'tail -50 /tmp/<app>.log'
+S 'journalctl | grep <app> | tail -50'   # authoritative when the log file is empty/stale
 S 'pgrep <app>'
 S 'pkill -9 <app>'
 

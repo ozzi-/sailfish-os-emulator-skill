@@ -16,6 +16,7 @@ physical machine.
 |-------|-----------|------|
 | Malicious app (deployed by you) | Runs as `defaultuser` (uid 100000) inside the guest, firejail sandbox | Could attempt: network exfil to host/LAN, input injection (PIN bypass), read host files via shared folders |
 | Compromised guest kernel | Full guest root | Could: escape to host (VBox exploit), read host memory |
+| Build engine VM (SDK) | SDK architecture REQUIRES its `src1` shared folder to be the host home dir **read-write** (engine writes `.sfdk` build state into your project tree); it also has NAT internet (build deps) | Building untrusted source can read the host home and exfiltrate over internet. **Accepted risk — see §2.5.** Build only source you trust. |
 | Another VM / process on host | Same user or root on host | Could: access VM disk image, VNC, SSH |
 
 **Trust boundary:** The guest OS and its apps are UNTRUSTED. The host is
@@ -79,6 +80,53 @@ Mitigation: don't run sensitive services on the host without auth/firewall.
 
 ---
 
+## §2.5 Build Engine — Accepted Risks (S-1, S-2, S-8)
+
+The **build engine** VM (`Sailfish SDK Build Engine`) compiles your app from
+the host filesystem via VirtualBox shared folders. Its share layout is
+**fixed by the SDK** (no `sfdk` property exists to narrow it), which forces
+three accepted risks. Understand them before building untrusted source.
+
+### S-1 — `src1` shared folder is host home, READ-WRITE (accepted)
+
+**Evidence:** with `src1` set read-only, `sfdk build` fails with
+`mkdir: cannot create directory '<app>/.sfdk': Read-only file system`. The
+engine-side `/proc/mounts` shows `src1` (vboxsf) mapped to the host home,
+with `/home/<user>` on the engine as fuse.dynexecfs over it. The build
+process writes `.sfdk/` state **into the project tree**, so the share MUST
+be writable — there is no narrower share possible via `sfdk`.
+
+**Consequence:** a malicious (or compromised) build script runs in the
+engine with write access to the host home directory.
+**Mitigation:** treat the engine as a trusted build environment; only build
+source you trust; the engine has **no LAN access** (NIC2 = Internal only,
+§2), so its egress is internet-only.
+**Do NOT** re-apply read-only to `src1` — it breaks the build (verified).
+
+### S-2 — Engine can READ the whole host home (accepted)
+
+The engine's `home` share is read-only from the engine's view, which means
+the engine can read the entire host home directory. Combined with S-1's
+internet egress (needed for build dependencies), building untrusted source
+creates a **read + exfiltration path** to host files.
+**Mitigation:** same as S-1 — build only trusted source. The emulator VM
+is NOT affected: all of its shared folders are read-only from the guest
+(verified) and it has the §2 blackhole lockdown.
+
+### S-8 — VM guardrail (operational rule)
+
+The host user (in `vboxusers`) can `VBoxManage` **any** VM on the machine —
+and the host may have unrelated VMs (e.g. a personal desktop VM). The agent
+MUST operate only on the two Sailfish VMs:
+
+- `SailfishOS-*` (the emulator)
+- `Sailfish SDK Build Engine` (the build engine)
+
+Never power off, modify, delete, or take snapshots of any other VM.
+`uninstall.sh` enforces the same name-matching guardrail (§UNINSTALL.md).
+
+---
+
 ## §3 Sandbox / Permissions
 
 Apps run in a **firejail sandbox** (via `invoker -s --type=silica-session`
@@ -117,6 +165,31 @@ su defaultuser -c 'echo quit > /tmp/vts.cmd'
 # vts log shows: "REJECTED /tmp/vts.cmd (uid=100000, must be root)"
 # vts still running ✓
 ```
+
+### §4.1 Position file (`/tmp/vboxfake.pos`) — root-only check (S-5, FIXED)
+
+The shim reads tap positions from `/tmp/vboxfake.pos`. Any guest process
+writing arbitrary coords there would let it steer taps without going through
+vts. **Control:** `vboxfake.c` now `fstat()`s the position file and accepts
+it only when `st_uid == 0` (root); anything else is **ignored and the center
+default is used**.
+
+**Verification (both paths proven):**
+- *Accept:* root-owned `.pos` with explicit coords → taps land exactly at the
+  requested positions (icon tap opened the app; two center taps advanced the
+demo counter to 2, confirmed in screenshot).
+- *Reject:* a non-root-owned `.pos` containing bogus coords ("12345 54321")
+  → shim returned the center default (x=32767, y=32767) — verified for both
+  uid 100000 and uid 65534 via a host-built harness linking the same shim
+  source. Absent `.pos` → center default.
+
+### §4.2 FIFO `/tmp/vboxfake` (S-4, accepted)
+
+The kick FIFO is `0644` owned by `defaultuser` — any defaultuser process can
+write a 1-byte kick. **Harmless:** a kick alone does nothing; the actual
+event requires the BTN_LEFT press that only root (vts) can issue. It cannot
+be tightened further, because `lipstick` (defaultuser) must be able to open
+the read end.
 
 ---
 
@@ -197,6 +270,16 @@ ssh ... '/usr/local/bin/sf-input-setup.sh'
 # 8. Snapshot restore = clean reset (wipes all in-guest deployments)
 #    Re-deploy from host-side sources in this skill's tools/
 VBoxManage snapshot <vm> restore "5.1.0.11"
+
+# 9. VM guardrail (S-8): only ever operate on
+#    "SailfishOS-*" and "Sailfish SDK Build Engine" — the host may have
+#    other, unrelated VMs. Never poweroff/modify/delete any other VM.
+
+# 10. App logs: check the GUEST JOURNAL, not just the log file:
+ssh ... 'journalctl | grep <app> | tail -50'
+#    /tmp/<app>.log can be stale or empty when the session manager
+#    (sessiond) adopted the launch (app fd1/2 → socket, not your file).
+#    Verify UI behaviour via screenshot + journal — never the log file alone.
 ```
 
 ---
@@ -213,5 +296,7 @@ VBoxManage snapshot <vm> restore "5.1.0.11"
 | `scripts/swipe.sh` | Inject a swipe between coords |
 | `scripts/deploy.sh` | Build → deploy → launch → screenshot |
 | `SETUP.md` | First-time setup + re-run instructions |
+| `UNINSTALL.md` | Safe removal of the whole stack (dry-run by default) |
 | `NETWORKING.md` | Network topology + lockdown details |
 | `TESTING.md` | Test procedure for apps |
+| `scripts/uninstall.sh` | Destructive-cleanup script (dry-run default, `--yes` to execute) |

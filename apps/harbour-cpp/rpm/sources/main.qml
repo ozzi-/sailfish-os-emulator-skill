@@ -56,12 +56,11 @@ Window {
     // MouseArea declared LAST so it is the TOPMOST item. QML delivers a touch
     // to the topmost item at the touch point; if a Text (no handler) is on top,
     // the touch is lost. Putting the MouseArea on top catches every tap.
+    // NOTE: no debug output here — Qt 5.6 has no Qt.outputDebug; the visible
+    // counter IS the verification signal (screenshot before/after taps).
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
-        onPressed: {
-            root.taps++
-            Qt.outputDebug("TAP count=" + root.taps + " at " + Math.round(mouse.x) + "," + Math.round(mouse.y))
-        }
+        onPressed: root.taps++
     }
 }

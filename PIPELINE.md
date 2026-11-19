@@ -23,6 +23,8 @@ What it does:
    SDK images) — **app starts in the BACKGROUND** (behind home screen),
    log at `/tmp/<app>.log`
 5. Optional `screenshotpng` capture
+   ⚠ App log: `/tmp/<app>.log` may be **empty or stale** when sessiond
+   adopted the launch — check the guest journal: `journalctl | grep <app>`.
 
 App name is derived from the `harbour-*.spec` in the app tree.
 
@@ -87,6 +89,15 @@ VBoxManage controlvm "<VM>" screenshotpng out.png
   the app log; the shipped QML may differ from what you wrote
   (`rpm -ql <app>`, grep the installed QML).
 - **`/tmp` is tmpfs** — logs persist until VM reboot.
+- **App logs: verify with screenshot + journal, never the log file alone.**
+  When the session manager (sessiond) adopts a launch, the app's fd1/fd2 go
+  to a socket and `/tmp/<app>.log` goes stale/empty — the real log is the
+  journal: `journalctl | grep <app>` (guest). Multiple instances of the same
+  app can coexist (manual launch + deploy.sh + sessiond relaunch); the
+  frontmost window and the input-receiving instance may differ — `pkill -9
+  <app>` and relaunch via deploy.sh before judging behaviour.
+  (Also: `Qt.outputDebug` does NOT exist in Qt 5.6 — it throws TypeError;
+  use `console.log` or the journal.)
 - The build engine and emulator talk over an SDK internal network
   (10.220.220.x) — that's the SDK's own plumbing; you don't touch it.
 - **`deploy.sh` grants ALL sailjail capabilities by default** (no GUI dialogs).
