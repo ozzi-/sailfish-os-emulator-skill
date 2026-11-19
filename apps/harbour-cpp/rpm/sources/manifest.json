@@ -1,0 +1,18 @@
+{
+    "header": {
+        "version": 2,
+        "type": "application",
+        "uid": "8177312495217508282",
+        "name": "harbour-cpp"
+    },
+    "contents": {
+        "execution": {
+            "rules": [
+                {
+                    "name": "harbour-cpp",
+                    "policy": "internal"
+                }
+            ]
+        }
+    }
+}
