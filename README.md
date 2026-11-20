@@ -65,9 +65,10 @@ is already done and skips it).
 | `SECURITY.md` | Threat model, netlock, sandbox, input security, ops checklist |
 | `UNINSTALL.md` | Safe removal of the whole stack (dry-run by default) |
 | `QML-GOTCHAS.md` | Qt 5.6 / Silica pitfalls that cause white screens & dead taps |
-| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh` |
+| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh`, `smoke.sh`, `publish.sh` |
 | `tools/` | Guest input-pipeline + netlock sources (C, shell, python) |
 | `apps/harbour-cpp/` | Minimal C++/QML tap-counter app to validate the pipeline |
+| `apps/sfsmoke/` | Dedicated smoke-test canary app (tap counter) for tier T2 |
 
 ## Security
 
@@ -85,6 +86,25 @@ dir, the `sfdk` wrapper, the installer download, and optionally the distro
 packages (`--with-packages`) and the skill directory (`--with-skill`).
 **Dry-run by default** — it prints the plan with sizes and changes nothing
 until you pass `--yes`. Details and manual leftovers: `UNINSTALL.md`.
+
+## Testing & release workflow
+
+The skill ships a strict, tiered smoke-test suite (`scripts/smoke.sh`):
+
+| Tier | What it proves | Needs |
+|---|---|---|
+| T0 (static) | script syntax, repo hygiene, no personal data, installer hash gate, lock contract, uninstall dry-run safety | nothing (no VMs) |
+| T1 (guest health) | both VMs up, SSH, single vts daemon, shim mapped, resolution, internet-only netlock, vts root-only | live pipeline |
+| T2 (end-to-end) | builds + deploys + launches the canary app (`apps/sfsmoke`), proves taps change the UI (pixel diff), journal free of QML errors | live pipeline + pipeline lock (held automatically for the run) |
+
+```bash
+bash scripts/smoke.sh          # T0 + T1 (default)
+bash scripts/smoke.sh --fast   # T0 only
+bash scripts/smoke.sh --all    # T0 + T1 + T2 (full proof)
+```
+
+**Push gate:** `bash scripts/publish.sh` runs the full suite and pushes only
+on green — a broken skill is never shipped to other users.
 
 ## Concurrency (multiple Bionic projects/sessions)
 

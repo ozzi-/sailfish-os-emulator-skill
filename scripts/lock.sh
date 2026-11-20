@@ -72,7 +72,7 @@ case "${1:-}" in
             exec 9>>'${LOCK_FILE}'
             flock -n 9 || exit 1
             echo \$\$ > '${HOLDER_PID_FILE}'
-            sleep ${MIN} 9>&-   # fd 9 = the lock; must NOT leak to the sleep child
+            sleep $(( MIN * 60 )) 9>&-   # MIN is MINUTES (sleep takes seconds); fd 9 = the lock, must NOT leak to the sleep child
             rm -f '${HOLDER_PID_FILE}'
         " </dev/null >/dev/null 2>&1 &
         # Give the holder a moment to grab the lock (it had the free window).

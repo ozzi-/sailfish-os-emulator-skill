@@ -37,6 +37,15 @@ What it does:
 
 App name is derived from the `harbour-*.spec` in the app tree.
 
+> **Build-engine workspace:** the build engine is a VM and only sees host
+> files under the SDK *shared source* path (installer default: `$HOME`; set
+> at install time, visible in `~/.config/SailfishSDK/libsfdk/buildengines.xml`
+> as `SharedSrc`). `sfdk build` refuses to run outside it. `deploy.sh`
+> handles this for you: apps outside the workspace are **staged as a clean
+> copy** under `$SHARED_SRC/.sfdk-staging/<app-name>` and built there (the
+> RPM appears next to that staged copy). Manual `sfdk build` must be run
+> from a directory inside the workspace.
+
 ## Environment knobs
 
 `SFDK`, `VM_NAME` (auto-detected by default), `SSH_PORT` (2223), `SSH_KEY`,

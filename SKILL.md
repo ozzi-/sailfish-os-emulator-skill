@@ -35,9 +35,10 @@ logs, and verify the UI — without any physical phone or human in the loop.
 | `UNINSTALL.md` | Safe removal of the whole stack (dry-run by default) |
 | `TESTING.md` | UI verification workflow: screenshots, PIL, logs, phone-only items |
 | `QML-GOTCHAS.md` | Qt 5.6 / Silica pitfalls that cause white screens & dead taps |
-| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh` |
+| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh`, `smoke.sh`, `publish.sh` |
 | `tools/` | Guest input-pipeline sources: `vboxfake.c`, `vts.c`, `patch_isa_note.py`, `sf-input-setup.sh`, `vts-link.sh` |
 | `apps/harbour-cpp/` | Minimal C++/QML test app (tap counter) to validate the pipeline |
+| `apps/sfsmoke/` | Dedicated smoke-test canary (tap counter) — drives `smoke.sh` tier T2 |
 
 ## Quick start (agent)
 
@@ -96,3 +97,7 @@ logs, and verify the UI — without any physical phone or human in the loop.
 - **Restarting lipstick kills running apps** — relaunch after.
 - **Keep exactly ONE vts daemon** — two race and input dies.
 - After **any guest reboot**: re-run `sf-input-setup.sh` (one command).
+- **Before pushing skill changes: run `bash scripts/publish.sh`** — it runs the full
+  smoke suite (`smoke.sh --all`: static + guest health + end-to-end canary)
+  and refuses to push on any failure. Local iterations: `smoke.sh --fast`
+  (no VMs needed).

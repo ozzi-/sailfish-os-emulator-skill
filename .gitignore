@@ -8,3 +8,7 @@ tools/libvboxfake.so
 tools/vts
 apps/harbour-cpp/rpm/sources/Makefile
 apps/harbour-cpp/rpm/sources/qrc_*.cpp
+apps/sfsmoke/rpm/sources/Makefile
+apps/sfsmoke/rpm/sources/qrc_*.cpp
+apps/sfsmoke/rpm/sources/harbour-sfsmoke
+__pycache__/

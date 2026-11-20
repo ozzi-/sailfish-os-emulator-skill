@@ -1,0 +1,18 @@
+{
+    "header": {
+        "version": 2,
+        "type": "application",
+        "uid": "7391582460183729546",
+        "name": "harbour-sfsmoke"
+    },
+    "contents": {
+        "execution": {
+            "rules": [
+                {
+                    "name": "harbour-sfsmoke",
+                    "policy": "internal"
+                }
+            ]
+        }
+    }
+}

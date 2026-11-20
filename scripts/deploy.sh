@@ -99,7 +99,31 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$APP_DIR" && -d "$APP_DIR" ]] || err "Usage: $0 APP_DIR [--launch] [--screenshot [PATH]] [--stop] [--uninstall]"
-cd "$APP_DIR"
+APP_DIR="$(cd "$APP_DIR" && pwd)"
+
+# ── Build-engine workspace (sfdk can only build UNDER it) ─────
+# The build engine is a VM: it only sees host files under the SDK
+# "shared source" path (installer default: $HOME). sfdk refuses to
+# build outside it ("needs to be used under Sailfish SDK workspace").
+# If the app lives outside, stage a clean copy inside and build that.
+# Apps already inside the workspace are built in place (no copy).
+shared_src_dir() {
+    local cfg="$HOME/.config/SailfishSDK/libsfdk/buildengines.xml" v=""
+    if [[ -f "$cfg" ]]; then
+        v=$(sed -n 's|.*key="SharedSrc">\([^<]*\)</value>.*|\1|p' "$cfg" | head -1)
+    fi
+    if [[ -n "$v" ]]; then printf '%s' "$v"; else printf '%s' "$HOME"; fi
+}
+BUILD_DIR="$APP_DIR"
+SSD="$(shared_src_dir)"
+if [[ "$APP_DIR" != "$SSD" && "$APP_DIR" != "$SSD"/* ]]; then
+    BUILD_DIR="$SSD/.sfdk-staging/$(basename "$APP_DIR")"
+    rm -rf "$BUILD_DIR"
+    mkdir -p "$BUILD_DIR"
+    tar -C "$APP_DIR" --exclude=RPMS --exclude=.sfdk -cf - . | tar -C "$BUILD_DIR" -xf -
+    info "App is outside the SDK workspace ($SSD) — staged a clean copy: $BUILD_DIR"
+fi
+cd "$BUILD_DIR"
 
 # ── App name from the spec ────────────────────────────────────
 SPEC_FILE=$(find . -maxdepth 3 -name "harbour-*.spec" | head -1)
