@@ -41,12 +41,15 @@ is already done and skips it).
 
 1. `SETUP.md §1` — check what's already installed (VMs, SDK, keys, input tools)
 2. Install only what's missing (host deps → SDK → both VMs)
-3. Bring up the input pipeline (one idempotent command, `SETUP.md §3`)
-4. `scripts/deploy.sh <app> --launch --screenshot` — build, deploy, launch
-5. `tap.sh` / `swipe.sh` / screenshots / logs — verify the UI (`TESTING.md`)
-6. Iterate until the UI matches expectations → hand to a human for
-   device acceptance (a real phone is still the final acceptance step)
-7. To remove everything again: `bash scripts/uninstall.sh` (dry-run first,
+3. Bring up the input pipeline (guarded, one idempotent command, `SETUP.md §3`)
+4. `scripts/lock.sh hold 30` — take the **pipeline lock**: the emulator is
+   one shared VM for every Bionic session on the host, so only one session
+   drives it at a time (guarded scripts refuse to run without it)
+5. `scripts/deploy.sh <app> --launch --screenshot` — build, deploy, launch
+6. `tap.sh` / `swipe.sh` / screenshots / logs — verify the UI (`TESTING.md`)
+7. `scripts/lock.sh release` → hand to a human for device acceptance
+   (a real phone is still the final acceptance step)
+8. To remove everything again: `bash scripts/uninstall.sh` (dry-run first,
    then `--yes`; see `UNINSTALL.md`)
 
 ## Contents
@@ -62,7 +65,7 @@ is already done and skips it).
 | `SECURITY.md` | Threat model, netlock, sandbox, input security, ops checklist |
 | `UNINSTALL.md` | Safe removal of the whole stack (dry-run by default) |
 | `QML-GOTCHAS.md` | Qt 5.6 / Silica pitfalls that cause white screens & dead taps |
-| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh` |
+| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh` |
 | `tools/` | Guest input-pipeline + netlock sources (C, shell, python) |
 | `apps/harbour-cpp/` | Minimal C++/QML tap-counter app to validate the pipeline |
 
@@ -82,6 +85,15 @@ dir, the `sfdk` wrapper, the installer download, and optionally the distro
 packages (`--with-packages`) and the skill directory (`--with-skill`).
 **Dry-run by default** — it prints the plan with sizes and changes nothing
 until you pass `--yes`. Details and manual leftovers: `UNINSTALL.md`.
+
+## Concurrency (multiple Bionic projects/sessions)
+
+All sessions share the **same two VMs** — nothing spawns a VM per project.
+The input pipeline is a single global channel, so the skill serializes
+access: `scripts/lock.sh hold` before a test workflow, `release` after
+(kernel `flock`, auto-expiring, no stale locks; guarded scripts exit 75
+when another session has the pipeline). Details: `TESTING.md §Concurrency`,
+`SECURITY.md §9`.
 
 ## Assumptions
 

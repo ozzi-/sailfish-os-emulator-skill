@@ -29,6 +29,11 @@
 # ═════════════════════════════════════════════════════════════
 set -euo pipefail
 
+# Concurrency guard: the emulator is shared by ALL Bionic sessions on this
+# host — taps are only allowed under a held pipeline lock (scripts/lock.sh).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-lock.sh"
+sfos_require_lock "tap.sh"
+
 SCREEN_W="${SCREEN_W:-1088}"
 SCREEN_H="${SCREEN_H:-2260}"
 SSH_PORT="${SSH_PORT:-2223}"

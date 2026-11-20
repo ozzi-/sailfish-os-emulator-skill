@@ -4,12 +4,21 @@
 
 ```bash
 cd <skill>
+# The whole workflow runs under the pipeline lock (the emulator is shared by
+# every Bionic session on this host — TESTING.md §Concurrency, SECURITY.md §9):
+bash scripts/lock.sh hold 30
 bash scripts/deploy.sh /path/to/harbour-<app> --launch --screenshot [PATH]
 # options:
 #   --skip-build    deploy the last-built RPM (already in RPMS/)
 #   --stop          kill the app
 #   --uninstall     kill + remove the package
+bash scripts/lock.sh release
 ```
+
+> `deploy.sh` is **guarded**: it exits 75 ("another session has the pipeline")
+> unless `scripts/lock.sh hold` was called first. `sfdk build` inside it and
+> the manual `sfdk build` steps below share the same build-engine VM — run
+> them under the lock too.
 
 What it does:
 1. `sfdk build` — compiles on the build-engine VM (Qt 5.6, i486) → `RPMS/*.rpm`

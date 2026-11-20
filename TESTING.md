@@ -5,8 +5,31 @@ confirmed the UI renders correctly, controls are where expected, and basic
 interactions (tap, scroll) work. This catches most issues with zero phone
 round-trips.
 
+## Concurrency (read first — the emulator is SHARED)
+
+The emulator + build engine are ONE pair of VMs shared by **every** Bionic
+session on this host, and the input pipeline is a single global channel
+(`/tmp/vboxfake.pos` + FIFO + `vts`, no per-caller isolation). Two sessions
+interleaving taps/screenshots corrupt **both** verifications; `deploy.sh` and
+input-setup also kill running apps. So:
+
+```bash
+bash scripts/lock.sh hold 30    # BEFORE the loop (30 min auto-expire)
+# … deploy, tap, screenshot, verify, iterate …
+bash scripts/lock.sh release   # AFTER the loop (or let it expire)
+```
+
+- `tap.sh` / `swipe.sh` / `deploy.sh` / `apply-input.sh` **refuse to run**
+  without the lock (exit 75) — if you see that, another session is driving
+  the pipeline: `bash scripts/lock.sh status`, then `lock.sh wait 60` (or
+  poll), then retry.
+- Read-only ops (`screenshotpng`, `journalctl`) work anytime, but do NOT
+  **interpret** a screenshot taken while another session holds the lock.
+- If the hold expires mid-loop, just re-`hold` before the next guarded op.
+
 ## Verification loop (per feature/iteration)
 
+0. **Hold the pipeline lock** (see Concurrency above).
 1. **Build + deploy + launch** (`deploy.sh --launch --screenshot`) → screenshot.
    NOTE: App starts in background (behind home screen). Swipe up to unlock if
    locked, then tap the app icon or use `tap.sh` to interact.
@@ -30,7 +53,8 @@ round-trips.
    sessiond relaunch); the visible one and the input-receiving one can differ.
    `pkill -9 <app>` and relaunch via `deploy.sh` before judging.
 5. **Report** to the human: what was verified, screenshots, issues found &
-   fixed. Only then hand off for device acceptance (if in scope).
+   fixed. **Release the lock** (`bash scripts/lock.sh release`). Only then
+   hand off for device acceptance (if in scope).
 
 ## Commands
 

@@ -135,14 +135,18 @@ Security notes for this section (details in **SECURITY.md**):
 
 ## 3. Bring up (every boot — idempotent, one command)
 
-After any guest reboot (and safe mid-session):
+After any guest reboot (and safe mid-session). **Use the guarded wrapper**
+(it restarts lipstick, which kills running apps — so it goes through the
+pipeline lock like every other mutating op, SECURITY.md §9):
 
 ```bash
-ssh -p 2223 -i "$K" -o StrictHostKeyChecking=no -o BatchMode=yes \
-    root@127.0.0.1 '/usr/local/bin/sf-input-setup.sh'
+bash scripts/lock.sh hold 10
+bash scripts/apply-input.sh
+bash scripts/lock.sh release
 ```
 
-It (re)applies the shim env, restarts exactly ONE vts daemon, relinks the
+`apply-input.sh` runs the same guest script (`/usr/local/bin/sf-input-setup.sh`),
+which (re)applies the shim env, restarts exactly ONE vts daemon, relinks the
 vts-mouse evdev device into the i8042 slot, restarts lipstick, and prints a
 verification summary (vts procs = 1, link target, shim refs in lipstick ≥ 5).
 
@@ -150,6 +154,8 @@ verification summary (vts procs = 1, link target, shim refs in lipstick ≥ 5).
 
 ```bash
 cd <skill>
+# The whole verification runs under the pipeline lock (TESTING.md Concurrency):
+bash scripts/lock.sh hold 30
 # Build + deploy + launch the test app (tap counter):
 bash scripts/deploy.sh apps/harbour-cpp --launch --screenshot /tmp/verify-before.png
 # Right after boot the screen is LOCKED (black, no wallpaper — normal):
@@ -160,6 +166,7 @@ bash scripts/tap.sh "$CW" "$CH"
 sleep 1
 VBoxManage controlvm "$VM" screenshotpng /tmp/verify-after.png
 # PASS = the "TAPS" counter incremented. (Screenshot size == SCREEN_W x SCREEN_H.)
+bash scripts/lock.sh release
 ```
 
 > **Launch uses `invoker`, not `sailjail`.** On SDK images the `sailjail`

@@ -280,7 +280,44 @@ ssh ... 'journalctl | grep <app> | tail -50'
 #    /tmp/<app>.log can be stale or empty when the session manager
 #    (sessiond) adopted the launch (app fd1/2 → socket, not your file).
 #    Verify UI behaviour via screenshot + journal — never the log file alone.
+
+# 11. Pipeline lock state (who, if anyone, is driving the shared emulator):
+bash scripts/lock.sh status
+#    Mutating ops (tap/swipe/deploy/apply-input) refuse without a held lock.
 ```
+
+---
+
+## §9 Concurrency — the shared pipeline lock
+
+**Why:** the emulator + build engine are ONE pair of VMs shared by every
+Bionic session on this host. The input pipeline is a single global channel
+(`/tmp/vboxfake.pos` + `/tmp/vboxfake` FIFO + `vts` — no per-caller
+isolation), the screen is shared state, and `deploy.sh` / input-setup
+restart lipstick, which **kills running apps**. Two sessions interleaving
+corrupt both verifications. So one session drives the pipeline at a time.
+
+**Mechanism** (`scripts/lock.sh`): kernel `flock()` on
+`/tmp/sfos-pipeline.lock`, held by a detached background process that
+auto-expires (default 30 min). The kernel releases the lock the instant the
+holder dies (crash, kill, or the LM Studio app exiting) — **there are no
+stale locks** to clean up, and `release` kills the whole holder process
+group so no child can inherit the lock fd.
+
+**Guard** (`scripts/lib-lock.sh`): `tap.sh`, `swipe.sh`, `deploy.sh`,
+`apply-input.sh` exit **75 (EX_TEMPFAIL — "try again later")** unless the
+lock is held. `SFOSSKILL_NO_LOCK=1` bypasses the guard — a documented
+breaks-glass escape for when you KNOW the pipeline is otherwise idle.
+
+**Nature of this control:** it is a **cooperational concurrency control**,
+NOT a security boundary (any local user can bypass it). The security
+boundaries remain §2 (netlock), §3 (sailjail sandbox), §4 (root-only input
+commands), §5 (shim scope).
+
+**Verified** (2026-11-19): hold → second holder rejected (rc 1), `wait` 
+times out (rc 2), holder's own ops proceed, release frees the lock
+immediately (no fd-inherited residue), auto-expire frees the lock, guarded
+scripts exit 75 when free / run when held.
 
 ---
 
@@ -300,3 +337,6 @@ ssh ... 'journalctl | grep <app> | tail -50'
 | `NETWORKING.md` | Network topology + lockdown details |
 | `TESTING.md` | Test procedure for apps |
 | `scripts/uninstall.sh` | Destructive-cleanup script (dry-run default, `--yes` to execute) |
+| `scripts/lock.sh` | Shared-pipeline concurrency lock (hold/release/status/wait) |
+| `scripts/apply-input.sh` | Guarded input-pipeline apply (replaces raw ssh of sf-input-setup.sh) |
+| `scripts/lib-lock.sh` | Shared guard sourced by tap/swipe/deploy (exit 75 when unheld) |

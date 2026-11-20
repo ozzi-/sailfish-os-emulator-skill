@@ -56,6 +56,12 @@ DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/100000/dbus/user_bus_socket"
 PERMISSIONS="${PERMISSIONS:-internet,media_index,removable_media,user_directories,bluetooth,camera,microphone,audio,positioning,nfc,web_content}"
 ALL_PERMISSIONS="array:string:${PERMISSIONS}"
 
+# Concurrency guard: build engine + emulator are shared by ALL Bionic
+# sessions on this host (single input channel; deploy kills running apps).
+# Only run under a held pipeline lock (scripts/lock.sh hold).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-lock.sh"
+sfos_require_lock "deploy.sh"
+
 err()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "  $*"; }
 ok()   { echo "  ✓ $*"; }

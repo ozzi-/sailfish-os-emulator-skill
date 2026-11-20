@@ -35,7 +35,7 @@ logs, and verify the UI — without any physical phone or human in the loop.
 | `UNINSTALL.md` | Safe removal of the whole stack (dry-run by default) |
 | `TESTING.md` | UI verification workflow: screenshots, PIL, logs, phone-only items |
 | `QML-GOTCHAS.md` | Qt 5.6 / Silica pitfalls that cause white screens & dead taps |
-| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh` |
+| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh` |
 | `tools/` | Guest input-pipeline sources: `vboxfake.c`, `vts.c`, `patch_isa_note.py`, `sf-input-setup.sh`, `vts-link.sh` |
 | `apps/harbour-cpp/` | Minimal C++/QML test app (tap counter) to validate the pipeline |
 
@@ -45,16 +45,21 @@ logs, and verify the UI — without any physical phone or human in the loop.
    - Yes → skip to 3.
    - No → run `SETUP.md` steps (needs sudo for `build-deps.sh`; hand that to the
      user if there's no TTY).
-2. **Bring the emulator up** (SETUP.md §2) and apply the input pipeline:
-   `ssh -p 2223 -i $KEY root@127.0.0.1 '/usr/local/bin/sf-input-setup.sh'`
-   (idempotent — always safe to run, esp. after a guest reboot).
-3. **Build + deploy + launch** an app:
+2. **Bring the emulator up** (SETUP.md §2) and apply the input pipeline
+   (guarded, idempotent — always safe, esp. after a guest reboot):
+   `bash scripts/lock.sh hold 10 && bash scripts/apply-input.sh; bash scripts/lock.sh release`
+3. **Acquire the pipeline lock** — the emulator is shared by ALL Bionic
+   sessions on this host, one drives it at a time (TESTING.md, SECURITY.md §9):
+   `bash scripts/lock.sh hold 30`   # 30 min auto-expire; `status` to inspect
+4. **Build + deploy + launch** an app (guarded — refuses without the lock):
    `scripts/deploy.sh /path/to/harbour-<app> --launch --screenshot`
-4. **Interact + verify**: `scripts/tap.sh X Y`, `scripts/swipe.sh …`,
+5. **Interact + verify**: `scripts/tap.sh X Y`, `scripts/swipe.sh …`,
    screenshot, inspect with PIL, read the app log (TESTING.md).
-5. **Fix & repeat** until the UI looks right; only then hand to the human
-   for device acceptance (if a device is in scope).
-6. **Uninstall** (if the user asks to remove the whole stack):
+6. **Release the lock** when the workflow is done:
+   `bash scripts/lock.sh release`
+7. **Fix & repeat** (stay under the lock); only then hand to the human for
+   device acceptance (if a device is in scope).
+8. **Uninstall** (if the user asks to remove the whole stack):
    `bash scripts/uninstall.sh` (dry-run) → `--yes` to execute. UNINSTALL.md.
 
 ## Environment knobs (all optional, env vars)
@@ -67,6 +72,8 @@ logs, and verify the UI — without any physical phone or human in the loop.
 | `SSH_KEY` | `~/SailfishOS/vmshare/ssh/private_keys/sdk` | SDK SSH key |
 | `SFDK` | `~/.local/bin/sfdk` | SDK CLI |
 | `SDK_INSTALL_DIR` | `~/SailfishOS` | Where the SDK lives |
+| `SFOSSKILL_LOCK_FILE` | `/tmp/sfos-pipeline.lock` | Concurrency lock file (scripts/lock.sh) |
+| `SFOSSKILL_NO_LOCK` | unset | `=1` bypasses the lock guard (breaks glass only) |
 
 ## Key rules (learned the hard way — do not skip)
 
@@ -79,6 +86,11 @@ logs, and verify the UI — without any physical phone or human in the loop.
 - **`sailjail` is broken on SDK images** (missing profile). Use `invoker` for
   app launch. (deploy.sh handles this automatically.)
 - **Network: internet-only.** LAN is blackholed. See SECURITY.md §2.
+- **Pipeline lock is MANDATORY for mutating ops** (emulator + build engine
+  are shared by every Bionic session on this host): `tap.sh`, `swipe.sh`,
+  `deploy.sh`, `apply-input.sh` refuse to run without `scripts/lock.sh hold`
+  (exit 75 = another session has it — wait & retry). Release after the
+  workflow. Kernel flock → no stale locks. SECURITY.md §9.
 - **QML z-order**: a `Text` declared after a `MouseArea` eats its touches.
   Put the MouseArea last; use `onPressed`. (QML-GOTCHAS.md)
 - **Restarting lipstick kills running apps** — relaunch after.
