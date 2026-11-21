@@ -3,6 +3,8 @@
 RPMS/
 .sfdk/
 shots/
+# build-phone.sh copies the aarch64 phone RPM into <app>/dist
+dist/
 *.o
 tools/libvboxfake.so
 tools/vts

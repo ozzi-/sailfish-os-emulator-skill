@@ -16,6 +16,27 @@
 - **`pageStack.push("Page.qml")`** — use
   `pageStack.push(Qt.resolvedUrl("Page.qml"), { "prop": value })`.
 
+## White screen — cause #2: sailjail sandbox, no manifest.json
+
+A white screen is **not always** a QML instantiation failure. A *second*,
+independent cause: a sailjail app that ships **no `manifest.json`** dies inside
+the (default-**ON**) sailjail sandbox **before its first frame** → white screen,
+with no QML error in the journal. The bundled test apps ship a `manifest.json`,
+so this one is easy to miss.
+
+- **Diagnose:** after a white screen with no QML error, check the installed
+  package: `rpm -ql <app> | grep -E 'manifest.json|applications/'`. If there is
+  no `manifest.json` and the `.desktop` has no `[X-Sailjail]` section → this is
+  the cause. (`deploy.sh` prints this hint on a launch failure.)
+- **Fix (pick one):**
+  - ship a `manifest.json` (see `apps/sfsmoke/rpm/sources/manifest.json`), or
+  - add to the `.desktop` file:  `[X-Sailjail]` on one line, `Sandboxing=Disabled` on the next.
+    (per Jolla docs: `X-Sailjail` … `Sandboxing=Disabled`; note the key is
+    `Sandboxing`, not `Sandbox`. Disabling the sandbox is not allowed in the
+    Jolla Store, but is fine for your own apps.)
+- A `manifest.json` also lets you declare permissions (e.g. `internet`) so the
+  app gets network access without a runtime dialog.
+
 ## Silent rendering bugs (page loads, content just missing)
 
 - **`Repeater` with a JS-array model is broken (Qt 5.6 / SFOS 5.2).**
@@ -29,6 +50,12 @@
   (a `Row` of `Rectangle`s with `height` bound to data values).
 - **`visible:` bound to a flag set by a JS function** that can early-return
   → empty page. Log the flag during development.
+- **Circular width binding → both resolve to 0, no error, text invisible.**
+  `Label { width: parent.width - other.width }` where `parent` is the very `Row`
+  you are sizing: `parent.width` depends on the label, the label depends on
+  `parent.width` → QML breaks the cycle by zeroing, silently. Fix: give the
+  inner `Row` an explicit `width: parent.width` (or size only one side). Rule:
+  a `width` may only depend on an item that does **not** itself depend on it.
 
 ## Qt 5.6 API landmines
 
@@ -42,6 +69,9 @@
   handler's references fail with `ReferenceError` and abort silently.
 - No `QProcess::splitCommand`; `QSortFilterProxyModel::filterFixedString()`
   is private.
+- **`QByteArray` has no `.toLocal8Bit()`** — that is a `QString` method; calling
+  it on a `QByteArray` is a **compile error**. Convert with
+  `QString::fromUtf8(bytes)` (or `QString(bytes.constData(), bytes.size())`).
 - `QStringLiteral` strings are **UTF-16** in binaries — `strings`/`grep`
   for them is a false negative.
 - Launching other apps: `LauncherItem { filePath: path }` from
@@ -78,3 +108,19 @@ Absent: `SilicaButton`, `BackButton`, everything from `QtQuick.Controls*`.
 `fontSizeExtraSmall/Small/Medium/Large`, `paddingSmall/Medium/Large`,
 `horizontalPageMargin`, `pageHeaderHeight`, `rgba(color, alpha)`.
 Not present: `paddingTiny`.
+
+## App config & permissions (silent failures — not QML, easy to misread)
+
+- **Seeding app config over root SSH silently breaks the app.** Writing
+  `~/.config/<org>/<app>.conf` as root leaves the directory `root:root 700`.
+  The app runs as `defaultuser` and cannot traverse a root-only directory →
+  `QSettings` reads **zero keys** → the app silently falls back to its
+  hard-coded defaults (wrong URL, empty token) and looks "can't connect"
+  with no error. After any root-seeded config, hand ownership back to the
+  session user, then verify the app actually read it (log
+  `QSettings::allKeys()` / the resolved URL at startup):
+  ```sh
+  chown -R defaultuser:defaultuser ~/.config/<org>
+  chmod 700 ~/.config/<org>
+  chmod 600 ~/.config/<org>/<app>.conf
+  ```

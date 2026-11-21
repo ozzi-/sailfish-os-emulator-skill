@@ -15,7 +15,8 @@ logs, and verify the UI — without any physical phone or human in the loop.
 
 ## What this enables
 
-- **Build**: `sfdk build` compiles the app on the SDK build-engine VM (Qt 5.6, i486).
+- **Build**: `sfdk build` compiles the app on the SDK build-engine VM (Qt 5.6, i486)
+  for the emulator, or `build-phone.sh` (docker + mb2) for the **aarch64 phone RPM**.
 - **Deploy**: RPM → emulator VM (SSH), sailjaild permissions granted, app launched
   in a proper sailjail sandbox (fullscreen).
 - **Test**: `tap.sh X Y` / `swipe.sh X0 Y0 X1 Y1` inject real touch events
@@ -35,7 +36,7 @@ logs, and verify the UI — without any physical phone or human in the loop.
 | `UNINSTALL.md` | Safe removal of the whole stack (dry-run by default) |
 | `TESTING.md` | UI verification workflow: screenshots, PIL, logs, phone-only items |
 | `QML-GOTCHAS.md` | Qt 5.6 / Silica pitfalls that cause white screens & dead taps |
-| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh`, `smoke.sh`, `publish.sh` |
+| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh` (emulator), `build-phone.sh` (aarch64 phone RPM), `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh`, `lib-spec.sh`, `smoke.sh`, `publish.sh` |
 | `tools/` | Guest input-pipeline sources: `vboxfake.c`, `vts.c`, `patch_isa_note.py`, `sf-input-setup.sh`, `vts-link.sh` |
 | `apps/harbour-cpp/` | Minimal C++/QML test app (tap counter) to validate the pipeline |
 | `apps/sfsmoke/` | Dedicated smoke-test canary (tap counter) — drives `smoke.sh` tier T2 |
@@ -58,8 +59,11 @@ logs, and verify the UI — without any physical phone or human in the loop.
    screenshot, inspect with PIL, read the app log (TESTING.md).
 6. **Release the lock** when the workflow is done:
    `bash scripts/lock.sh release`
-7. **Fix & repeat** (stay under the lock); only then hand to the human for
-   device acceptance (if a device is in scope).
+7. **Fix & repeat** (stay under the lock). Once the UI is verified on the
+   emulator, build the **aarch64 phone RPM** for device acceptance:
+   `bash scripts/build-phone.sh /path/to/harbour-<app>` → the human installs it on
+   the phone (they own the phone; `build-phone.sh` prints the install commands).
+   See PIPELINE.md §Phone build.
 8. **Uninstall** (if the user asks to remove the whole stack):
    `bash scripts/uninstall.sh` (dry-run) → `--yes` to execute. UNINSTALL.md.
 

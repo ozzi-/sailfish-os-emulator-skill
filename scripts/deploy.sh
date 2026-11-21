@@ -19,7 +19,7 @@
 #   ./deploy.sh APP_DIR --uninstall                # remove from emulator
 #
 # Environment overrides:
-#   SFDK, VM_NAME, SSH_PORT, SSH_KEY, SHOTS_DIR
+#   SFDK, VM_NAME, SSH_PORT, SSH_KEY, SHOTS_DIR (default: $PWD/shots)
 # ═════════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -34,7 +34,10 @@ SSH_PORT="${SSH_PORT:-2223}"
 SSH_KEY="${SSH_KEY:-$HOME/SailfishOS/vmshare/ssh/private_keys/sdk}"
 SSH_USER="${SSH_USER:-root}"
 SSH_HOST="${SSH_HOST:-localhost}"
-SHOTS_DIR="${SHOTS_DIR:-$(dirname "$0")/shots}"
+# Screenshots land in the CWD (the project you run from), NOT inside the
+# skill dir — easy to accidentally commit/pollute the skill otherwise.
+# Override with SHOTS_DIR=/some/other/dir if you want a fixed location.
+SHOTS_DIR="${SHOTS_DIR:-$PWD/shots}"
 
 # Non-interactive SSH: a first-ever connection on a fresh host must not hang
 # on a host-key prompt. (SSH_HOST stays 127.0.0.1/localhost — see SECURITY.md.)
@@ -60,6 +63,7 @@ ALL_PERMISSIONS="array:string:${PERMISSIONS}"
 # sessions on this host (single input channel; deploy kills running apps).
 # Only run under a held pipeline lock (scripts/lock.sh hold).
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-lock.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-spec.sh"
 sfos_require_lock "deploy.sh"
 
 err()  { echo "ERROR: $*" >&2; exit 1; }
@@ -126,12 +130,14 @@ fi
 cd "$BUILD_DIR"
 
 # ── App name from the spec ────────────────────────────────────
+# Handles every common spec form (see scripts/lib-spec.sh): literal
+# `Name:`, macro `Name: %{name}`/`%{appname}` + `%define …`, or filename.
 SPEC_FILE=$(find . -maxdepth 3 -name "harbour-*.spec" | head -1)
 [[ -n "$SPEC_FILE" ]] || err "No harbour-*.spec found under $APP_DIR"
-APP_NAME=$(grep -m1 '^%define name' "$SPEC_FILE" | awk '{print $3}')
-[[ -n "$APP_NAME" ]] || APP_NAME=$(basename "$SPEC_FILE" .spec)
+APP_NAME=$(spec_app_name "$SPEC_FILE")
+[[ -n "$APP_NAME" ]] || err "Could not derive the app name from $SPEC_FILE"
 BINARY="/usr/bin/$APP_NAME"
-info "App: $APP_NAME"
+info "App: $APP_NAME (from $SPEC_FILE)"
 
 # ── Emulator up? ──────────────────────────────────────────────
 ensure_emulator() {
@@ -201,9 +207,26 @@ launch() {
         ok "Running (pid $(remote "pgrep $APP_NAME" | head -1))"
         info "  (app is in background — tap its icon or use tap.sh to interact)"
     else
-        echo "  ✗ not running — last log lines:"
+        echo "  ✗ not running. Real log = the guest journal (the /tmp file is often" >&2
+        echo "    stale/empty once sessiond adopts the launch):" >&2
+        remote "journalctl --no-pager -n 40 2>/dev/null | grep -iE 'invoker|sailjail|firejail|$APP_NAME' | tail -12" || true
         remote "tail -5 /tmp/$APP_NAME.log 2>/dev/null" || true
-        remote "journalctl -n 10 2>/dev/null | grep -iE 'invoker|sailjail|$APP_NAME' | tail -5" || true
+        # White screen / instant exit with NO QML error? A sailjail app that
+        # ships no manifest.json dies in the (default-ON) sandbox before its
+        # first frame. Check whether the installed package provides one (or an
+        # [X-Sailjail] desktop entry); if neither, surface the hint.
+        # QML-GOTCHAS.md → white screen, cause #2.
+        local has_manifest has_sailjail
+        has_manifest=$(remote "rpm -ql $APP_NAME 2>/dev/null | grep -c 'manifest\.json'" 2>/dev/null || echo 0)
+        has_sailjail=$(remote "rpm -ql $APP_NAME 2>/dev/null | grep '/applications/.*\.desktop$' | xargs -r grep -l 'X-Sailjail' 2>/dev/null | wc -l" 2>/dev/null || echo 0)
+        if [[ "${has_manifest:-0}" == "0" && "${has_sailjail:-0}" == "0" ]]; then
+            echo "  HINT: installed package ships no manifest.json and no [X-Sailjail]" >&2
+            echo "    desktop entry. Under the default (enabled) sailjail sandbox such" >&2
+            echo "    an app dies before its first frame → white screen." >&2
+            echo "    Fix: ship a manifest.json (see apps/sfsmoke/rpm/sources/manifest.json)," >&2
+            echo "    or add '[X-Sailjail] Sandboxing=Disabled' to the .desktop file" >&2
+            echo "    (QML-GOTCHAS.md → white screen, cause #2.)" >&2
+        fi
         return 1
     fi
 }
@@ -252,6 +275,7 @@ if [[ "$DO_LAUNCH" == 1 ]]; then
     fi
 fi
 echo
-echo "  App log:    ssh -p $SSH_PORT -i \$SSH_KEY root@$SSH_HOST 'cat /tmp/$APP_NAME.log'"
+echo "  Log (real): ssh -p $SSH_PORT -i \$SSH_KEY root@$SSH_HOST \"journalctl --no-pager -n 40 | grep -iE 'invoker|sailjail|$APP_NAME' | tail\""
+echo "  Log (file): ssh -p $SSH_PORT -i \$SSH_KEY root@$SSH_HOST 'tail -5 /tmp/$APP_NAME.log'   # may be stale/empty once sessiond adopts the launch"
 echo "  Stop:       $0 $APP_DIR --stop"
 echo "  Uninstall:  $0 $APP_DIR --uninstall"

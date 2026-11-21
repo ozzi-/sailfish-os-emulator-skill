@@ -162,7 +162,10 @@ t0_3_genericity() {
 import re, sys, os, ipaddress
 
 repo = sys.argv[1]
-ALLOW_NAMES = re.compile(r'^(defaultuser|root|example|user|users|ozzi|ozzi-|username|youruser)$', re.I)
+# mersdk = the SDK docker image's INTERNAL build-user home (build-phone.sh
+# mounts into /home/mersdk/proj) — a well-known SDK constant, NOT a host
+# personal path, so it is allowlisted.
+ALLOW_NAMES = re.compile(r'^(defaultuser|root|example|user|users|ozzi|ozzi-|username|youruser|mersdk)$', re.I)
 ALLOW_NETS = [ipaddress.ip_network(n) for n in
               ('127.0.0.0/8', '10.0.2.0/24', '10.220.220.0/24', '169.254.0.0/16', '0.0.0.0/32')]
 ALLOW_IPS = {ipaddress.ip_address('192.168.1.1'), ipaddress.ip_address('255.255.255.255')}
@@ -300,6 +303,44 @@ t0_6_uninstall_dryrun() {
         fi
     done < <(VBoxManage list vms 2>/dev/null | sed -n 's/^"\([^"]*\)".*/\1/p')
     return $rc2
+}
+
+t0_7_spec_parser() {
+    # The app-name resolver (scripts/lib-spec.sh) must handle every common
+    # spec form — the reviewer's real-world app used `Name: %{appname}` +
+    # `%define appname …`, which the old `grep '%define name'` never matched.
+    local T rc=0
+    T=$(mktemp -d)
+    source "$SCRIPTS_DIR/lib-spec.sh"
+    printf 'Name:           harbour-alpha\nVersion:  1.2.3\nRelease: 4\n' > "$T/s1.spec"
+    printf '%%define name harbour-beta\n%%define version 2.0.0\nName:           %%{name}\nVersion:        %%{version}\n' > "$T/s2.spec"
+    printf '%%define appname harbour-bionic-remote\nName:           %%{appname}\n' > "$T/s3.spec"
+    printf 'Name: %%{name}\n' > "$T/harbour-orphan.spec"   # broken macro -> filename
+
+    chk() { local got want label; got="$1"; want="$2"; label="$3"
+        if [[ "$got" == "$want" ]]; then :; else printf '  BAD %-28s -> %q (want %q)\n' "$label" "$got" "$want"; rc=1; fi; }
+
+    chk "$(spec_app_name "$T/s1.spec")"            "harbour-alpha"         "literal Name:"
+    chk "$(spec_app_name "$T/s2.spec")"            "harbour-beta"          "Name: %{name}+define"
+    chk "$(spec_app_name "$T/s3.spec")"            "harbour-bionic-remote" "Name: %{appname}+define"
+    chk "$(spec_app_name "$T/harbour-orphan.spec")" "harbour-orphan"      "filename fallback"
+    chk "$(spec_app_name "$CANARY_DIR/rpm/harbour-sfsmoke.spec")" "harbour-sfsmoke" "bundled canary spec"
+    chk "$(spec_app_version "$T/s2.spec")"         "2.0.0"               "version resolve"
+    rm -rf "$T"
+    return $rc
+}
+
+t0_8_build_phone_dryrun() {
+    # build-phone.sh: --help exits 0; --dry-run resolves name+version and shows
+    # the docker/mb2 plan WITHOUT touching docker (safe on any host).
+    local rc=0 out
+    bash "$SCRIPTS_DIR/build-phone.sh" --help >/dev/null 2>&1 || { echo "--help exited non-zero"; rc=1; }
+    out=$(bash "$SCRIPTS_DIR/build-phone.sh" "$CANARY_DIR" --dry-run 2>&1) || { echo "dry-run exited non-zero:"; sed 's/^/   /' <<<"$out" | tail -8; return 1; }
+    grep -q  "harbour-sfsmoke" <<<"$out" || { echo "dry-run did not resolve the app name"; rc=1; }
+    grep -qi "docker run"      <<<"$out" || { echo "dry-run did not show the docker command"; rc=1; }
+    grep -qi "mb2 build"       <<<"$out" || { echo "dry-run did not show the mb2 build"; rc=1; }
+    grep -q  "nothing was built" <<<"$out" || { echo "dry-run missing its 'nothing was built' marker"; rc=1; }
+    return $rc
 }
 
 # ═════════════════════════════════════════════════════════════
@@ -544,6 +585,8 @@ run_test T0.3 "genericity scan (no personal paths/owners/IPs)"       t0_3_generi
 run_test T0.4 "setup-sdk.sh SHA-256 fail-hard gate + opt-out"        t0_4_hash_gate
 run_test T0.5 "lock contract (75-refusal, hold, minutes, auto-expire)" t0_5_lock_contract
 run_test T0.6 "uninstall dry-run touches nothing; non-SFOS VMs safe" t0_6_uninstall_dryrun
+run_test T0.7 "spec parser resolves Name: literal/%define/filename"    t0_7_spec_parser
+run_test T0.8 "build-phone.sh --dry-run (name+version, docker plan)"  t0_8_build_phone_dryrun
 
 if [[ "$RUN_T1" == 1 ]]; then
     echo

@@ -35,7 +35,10 @@ What it does:
    ⚠ App log: `/tmp/<app>.log` may be **empty or stale** when sessiond
    adopted the launch — check the guest journal: `journalctl | grep <app>`.
 
-App name is derived from the `harbour-*.spec` in the app tree.
+App name is derived from the `harbour-*.spec` in the app tree — `deploy.sh`
+resolves `Name:` (a literal, or a `%{macro}` resolved through `%define …`) and
+falls back to the spec filename. See `scripts/lib-spec.sh` (unit-tested in
+`smoke.sh` T0.7).
 
 > **Build-engine workspace:** the build engine is a VM and only sees host
 > files under the SDK *shared source* path (installer default: `$HOME`; set
@@ -45,6 +48,44 @@ App name is derived from the `harbour-*.spec` in the app tree.
 > copy** under `$SHARED_SRC/.sfdk-staging/<app-name>` and built there (the
 > RPM appears next to that staged copy). Manual `sfdk build` must be run
 > from a directory inside the workspace.
+
+## Phone build (aarch64 — the other target)
+
+Two targets, two scripts:
+
+| Target | Arch | Script | Where it builds | Used for |
+|---|---|---|---|---|
+| **Emulator** | i486 | `deploy.sh` (sfdk) | SDK build-engine VM | fast agent verify loop |
+| **Phone** | aarch64 | `build-phone.sh` (docker + mb2) | a docker container | final-acceptance RPM |
+
+`deploy.sh` produces the i486 RPM and drives the emulator. `build-phone.sh`
+produces the **aarch64** RPM the phone actually installs, using the proven
+docker + mb2 recipe — the SDK image supplies the aarch64 cross-compiler, so you
+do not need one on the host:
+
+```bash
+# Dry-run first (prints the plan, touches nothing — safe on any host):
+bash scripts/build-phone.sh /path/to/harbour-<app> --dry-run
+
+# Real build (~1–3 min). Does NOT take the pipeline lock: it never touches the
+# emulator VM, so it is safe to run alongside a session driving the emulator.
+bash scripts/build-phone.sh /path/to/harbour-<app>
+# → RPM copied to <app>/dist/<name>-<version>-<release>.aarch64.rpm
+```
+
+- **The aarch64 RPM will NOT run on the i486 emulator** — by design. Verify on
+  the emulator first (`deploy.sh`), then build the phone RPM.
+- **Delivery to the phone is a user step** (the phone must be on the network):
+  `scp <rpm> defaultuser@<PHONE_IP>:~/`, then on the phone
+  `devel-su rpm -i ~/<rpm>` (or `-Uvh` to upgrade). `build-phone.sh` prints
+  these exact commands when it finishes.
+- **Requires** docker + the aarch64 SDK image (default
+  `coderus/sailfishos-platform-sdk-aarch64:5.2.0.15`; override with
+  `SFOSSDK_AARCH64_IMAGE`). If the image is missing, `build-phone.sh` prints
+  the exact `docker pull` command instead of failing silently.
+- **Optional hardening:** compile the QML against the real aarch64 QML engine
+  under `qemu-aarch64` for a `COMPILE OK` before shipping (a larger recipe;
+  the emulator verify loop above is the skill's main path).
 
 ## Environment knobs
 
@@ -91,6 +132,19 @@ VBoxManage controlvm "<VM>" screenshotpng out.png
 
 ## Notes & gotchas
 
+- **`mb2` / `sfdk` build in place and skip `%prep` / `%setup`** — the source
+  tree is at the build root (`%{_builddir}`), **not** at
+  `%{_builddir}/<name>-<version>`. A stock qmake spec that does
+  `cd %{_builddir}/%{name}-%{version}` therefore fails. Resolve the source root
+  defensively:
+  ```sh
+  if [ -d %{_builddir}/%{name}-%{version} ]; then
+      cd %{_builddir}/%{name}-%{version}
+  else
+      cd %{_builddir}
+  fi
+  ```
+  (The bundled specs avoid this by using a literal `cd rpm/sources`.)
 - **App windows render fullscreen** — lipstick maximizes them; a 360×740 QML
   Window is scaled to the whole framebuffer.
 - **`pgrep` on the guest is BusyBox** — `pgrep -x` matches full argv0 and
