@@ -26,9 +26,12 @@ the whole setup survives a full guest reboot.
 
 ## Import into Bionic
 
-```bash
-git clone <url of this repo> ~/.lmstudio/skills/sailfish-os
-```
+Pick one:
+
+- **Ask Bionic** (recommended): invoke `@Install Skill` and give it this
+  repo's URL — Bionic installs skills straight from a URL.
+- **Clone it**: `git clone <url of this repo> ~/.lmstudio/skills/sailfish-os`
+  (later updates = `git pull` inside that folder).
 
 Then, in any Bionic session: *"Set up the Sailfish OS emulator skill and
 verify the pipeline."*
@@ -65,7 +68,7 @@ is already done and skips it).
 | `SECURITY.md` | Threat model, netlock, sandbox, input security, ops checklist |
 | `UNINSTALL.md` | Safe removal of the whole stack (dry-run by default) |
 | `QML-GOTCHAS.md` | Qt 5.6 / Silica pitfalls that cause white screens & dead taps |
-| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh`, `smoke.sh`, `publish.sh` |
+| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh`, `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh`, `lib-spec.sh`, `smoke.sh`, `publish.sh`, `sync-local.sh` (maintainer) |
 | `tools/` | Guest input-pipeline + netlock sources (C, shell, python) |
 | `apps/harbour-cpp/` | Minimal C++/QML tap-counter app to validate the pipeline |
 | `apps/sfsmoke/` | Dedicated smoke-test canary app (tap counter) for tier T2 |
@@ -105,6 +108,42 @@ bash scripts/smoke.sh --all    # T0 + T1 + T2 (full proof)
 
 **Push gate:** `bash scripts/publish.sh` runs the full suite and pushes only
 on green — a broken skill is never shipped to other users.
+
+## Versioning & releases
+
+The version lives in the `version:` line of the `SKILL.md` front matter
+(Bionic ignores the field; it drives tagging and install reporting).
+To cut a release:
+
+1. Bump `version:` in `SKILL.md` — patch = doc fixes, minor = new capability,
+   major = breaking workflow change
+2. `git add -A && git commit -m "…"`
+3. `bash scripts/publish.sh` — full smoke suite, push on green, then tag +
+   push `v<version>` (skips tagging when the version is unchanged, so
+   re-publishing a release is a no-op for tags)
+
+**Distribution:** there is no Bionic/LM Studio skill store as of v0.1.0 —
+this repository is the distribution channel. Bionic's supported install
+paths are *from a URL* (`@Install Skill`, e.g. a GitHub repo) or a local
+SKILL.md folder (Settings → Skills). The SKILL.md format is the portable
+[Agent Skills](https://agentskills.io/specification) standard, so the same
+folder also works in Claude Code and Codex.
+
+## Update the local install (maintainer)
+
+On the machine where this repo lives, the installed copy at
+`~/.lmstudio/skills/sailfish-os/` is a **plain folder synced from the repo**
+(not a clone):
+
+```bash
+bash scripts/sync-local.sh             # sync + verify (idempotent)
+bash scripts/sync-local.sh --check     # diff only, change nothing
+bash scripts/sync-local.sh --dry-run   # preview what would change
+```
+
+It keeps the folder clean (no `.git`, no `README.md`), removes stale files,
+refuses destinations outside `~/.lmstudio/skills/`, and reports the installed
+version. Safe to re-run any time.
 
 ## Concurrency (multiple Bionic projects/sessions)
 

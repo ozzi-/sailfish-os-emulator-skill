@@ -1,6 +1,7 @@
 ---
 name: sailfish-os
 display-name: Sailfish OS
+version: 0.1.0
 description: "Sailfish OS emulator pipeline: install the SDK, build & deploy
   Harbour apps, and tap/swipe/screenshot to verify UI. Use for any Sailfish OS
   app work."
@@ -37,7 +38,7 @@ logs, and verify the UI — without any physical phone or human in the loop.
 | `TESTING.md` | UI verification workflow: screenshots, PIL, logs, phone-only items |
 | `HARNESS.md` | Local test ladder (QML compile check, geometry, D-Bus E2E) — no VM, no phone |
 | `QML-GOTCHAS.md` | Qt 5.6 / Silica pitfalls that cause white screens & dead taps |
-| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh` (emulator), `build-phone.sh` (aarch64 phone RPM), `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh`, `lib-spec.sh`, `smoke.sh`, `publish.sh` |
+| `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh` (emulator), `build-phone.sh` (aarch64 phone RPM), `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh`, `lib-spec.sh`, `smoke.sh`, `publish.sh`, `sync-local.sh` (maintainer) |
 | `tools/` | Guest input-pipeline sources: `vboxfake.c`, `vts.c`, `patch_isa_note.py`, `sf-input-setup.sh`, `vts-link.sh` |
 | `apps/harbour-cpp/` | Minimal C++/QML test app (tap counter) to validate the pipeline |
 | `apps/sfsmoke/` | Dedicated smoke-test canary (tap counter) — drives `smoke.sh` tier T2 |
@@ -106,3 +107,15 @@ logs, and verify the UI — without any physical phone or human in the loop.
   smoke suite (`smoke.sh --all`: static + guest health + end-to-end canary)
   and refuses to push on any failure. Local iterations: `smoke.sh --fast`
   (no VMs needed).
+
+## Maintainer workflow (skill repo)
+
+- **Test**: `bash scripts/smoke.sh` (T0+T1), `--fast` (T0 only), `--all` (full).
+- **Update the local Bionic install from the repo** (idempotent, safe to re-run):
+  `bash scripts/sync-local.sh` — diff-only with `--check`, preview with `--dry-run`.
+- **Release a version**: bump `version:` in this file's front matter → commit →
+  `bash scripts/publish.sh` (full suite, push, then tag + push `v<version>`).
+  Bump policy: patch = doc fixes, minor = new capability, major = breaking change.
+- **Share/install on another machine**: hand over the repo URL — Bionic installs
+  skills straight from a URL (`@Install Skill`); the format is the portable
+  Agent Skills standard (also works in Claude Code / Codex).
