@@ -134,6 +134,10 @@ VBoxManage controlvm "<VM>" screenshotpng out.png
 
 ## Notes & gotchas
 
+- **Inspecting RPMs under Bionic:** Bionic shims some host binaries —
+  `rpm -qpi` fails (`unknown option`) and `cpio` misbehaves. Inspect with
+  `rpm2cpio <rpm> | bsdtar -tv`; note bsdtar **strips setuid on extraction**,
+  so verify file modes via `-tv`, not by `ls` on extracted files.
 - **`sfdk build` is IN-PLACE and takes NO path argument** — run it from the
   app root (`cd <app-repo> && sfdk build`); passing a path triggers a
   "shadow" flow that fails. The source must be a **real directory on a local

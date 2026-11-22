@@ -70,6 +70,8 @@ VBoxManage modifyvm "<VM>" --natpf1 add myport,tcp,127.0.0.1,<HOST_PORT>,,<GUEST
   SECURITY.md (netlock known limitation).
 - **Sandboxed app networking:** Requires `internet` permission in manifest
   + sailjaild capability grant (deploy.sh handles both).
+- **WebView is NOT installed by default** in the guest — if the app needs it,
+  install `sailfish-components-webview-qt5` (via the build engine or SSH).
 
 ## Quick self-test
 
