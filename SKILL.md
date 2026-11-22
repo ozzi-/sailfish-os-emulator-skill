@@ -35,6 +35,7 @@ logs, and verify the UI — without any physical phone or human in the loop.
 | `SECURITY.md` | Threat model, netlock, sandbox, input security, ops checklist |
 | `UNINSTALL.md` | Safe removal of the whole stack (dry-run by default) |
 | `TESTING.md` | UI verification workflow: screenshots, PIL, logs, phone-only items |
+| `HARNESS.md` | Local test ladder (QML compile check, geometry, D-Bus E2E) — no VM, no phone |
 | `QML-GOTCHAS.md` | Qt 5.6 / Silica pitfalls that cause white screens & dead taps |
 | `scripts/` | `build-deps.sh`, `setup-sdk.sh`, `deploy.sh` (emulator), `build-phone.sh` (aarch64 phone RPM), `tap.sh`, `swipe.sh`, `uninstall.sh`, `lock.sh`, `apply-input.sh`, `lib-lock.sh`, `lib-spec.sh`, `smoke.sh`, `publish.sh` |
 | `tools/` | Guest input-pipeline sources: `vboxfake.c`, `vts.c`, `patch_isa_note.py`, `sf-input-setup.sh`, `vts-link.sh` |

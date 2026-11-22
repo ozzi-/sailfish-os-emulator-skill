@@ -83,9 +83,11 @@ bash scripts/build-phone.sh /path/to/harbour-<app>
   `coderus/sailfishos-platform-sdk-aarch64:5.2.0.15`; override with
   `SFOSSDK_AARCH64_IMAGE`). If the image is missing, `build-phone.sh` prints
   the exact `docker pull` command instead of failing silently.
-- **Optional hardening:** compile the QML against the real aarch64 QML engine
-  under `qemu-aarch64` for a `COMPILE OK` before shipping (a larger recipe;
-  the emulator verify loop above is the skill's main path).
+- **Optional hardening (recommended before shipping):** run the local
+  verification ladder — QML compile check, geometry harness, D-Bus E2E
+  harness — all under `qemu-aarch64`, no VM, no phone: see `HARNESS.md`.
+  The emulator verify loop above remains the skill's main path; the ladder
+  catches silent rendering bugs the emulator tap loop may not reach.
 
 ## Environment knobs
 
