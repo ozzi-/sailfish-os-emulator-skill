@@ -81,6 +81,46 @@ so this one is easy to miss.
   `Timer` and verify `activeFocus`.
 - mb2's spec parser trips on a literal `%prep` anywhere in the spec (even
   comments) and on undefined `%qmake5` (replace with plain `qmake`/`make`).
+- **Debug-log 0444 trap:** never `QFile::setPermissions` on a log file you
+  keep appending to without `QFile::WriteOwner` — a setuid-root app can't
+  reopen it, and every later append fails **silently**. The log then looks
+  like the app died at start (one line), which masks whatever the real bug is.
+
+## D-Bus (Qt 5.6) — silent failure patterns
+
+- **Only `QDBusAbstractAdaptor` subclasses expose methods.** A plain
+  `QObject` exposes **nothing** on D-Bus. The adaptor must carry
+  `Q_CLASSINFO("D-Bus Interface", "<interface>")`.
+- **An adaptor slot returning `QDBusArgument` silently drops the WHOLE
+  interface** from introspection — the client gets `UnknownMethod` on every
+  method, not just that one. Return a concrete registered metatype that
+  serializes to the real signature (e.g. `QList<Entry>` with a struct
+  `Entry { QDBusObjectPath; QVariantMap; }` → the real `a(oa{sv})`).
+- **`qDBusRegisterMetaType<T>()`** (template call, `#include
+  <QtDBus/qdbusmetatype.h>`) registers the D-Bus signature;
+  `qRegisterMetaType<T>()` does **not**.
+- **Reading complex replies:** `QDBusReply<QList<T>>` can be rejected
+  ("Unexpected reply signature … expected \"\"") even with the metatype
+  registered. Call into `QDBusReply<QDBusArgument>` and read via a `const
+  operator>>` on a **copy** — calling `beginArray()`/`beginStructure()` on
+  the reply argument directly is a write on a read-only object →
+  `QDBusArgument: write from a read-only object`, then segfault.
+- **Verify what actually got exposed** before debugging the client:
+  introspect the live bus —
+  `dbus-send --system --print-reply --dest=:1.<n> /
+  org.freedesktop.DBus.Introspectable.Introspect` (with the app's bus
+  address). A service showing up with no methods = one of the rules above
+  was violated.
+
+## Privileged D-Bus calls (setuid app pattern)
+
+Mutating D-Bus calls on a system service (e.g. connman VPN
+`Connect()`/`Disconnect()`) are refused for sandboxed apps — listing is
+open to console users, mutating is not. The proven pattern:
+- spec: install the binary **setuid** — `%attr(4755,root,root) ...`;
+- C++: `QCoreApplication::setSetuidAllowed(true)` in `main()`;
+- spec `%post`: add `root` **and** `defaultuser` to the service's required
+  group (e.g. `privileged` for connman-vpn).
 
 ## Input-specific (affects tap testing)
 

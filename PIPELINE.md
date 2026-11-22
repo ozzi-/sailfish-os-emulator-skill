@@ -132,6 +132,11 @@ VBoxManage controlvm "<VM>" screenshotpng out.png
 
 ## Notes & gotchas
 
+- **`sfdk build` is IN-PLACE and takes NO path argument** — run it from the
+  app root (`cd <app-repo> && sfdk build`); passing a path triggers a
+  "shadow" flow that fails. The source must be a **real directory on a local
+  filesystem**: a mirror/copy of the repo under a local path works, but a
+  symlink pointing at a network/overlay (FUSE) mount has failed.
 - **`mb2` / `sfdk` build in place and skip `%prep` / `%setup`** — the source
   tree is at the build root (`%{_builddir}`), **not** at
   `%{_builddir}/<name>-<version>`. A stock qmake spec that does
