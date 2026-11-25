@@ -66,14 +66,27 @@ if [[ -z "$VERSION" ]]; then
     exit 0
 fi
 
-if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1 \
-   || git ls-remote --tags origin "$TAG" 2>/dev/null | grep -q "refs/tags/$TAG"; then
+# Remote already has this tag → release unchanged, nothing to do.
+if git ls-remote --tags origin "$TAG" 2>/dev/null | grep -q "refs/tags/$TAG"; then
     echo
-    echo "  ✓ tag $TAG already exists — release unchanged."
+    echo "  ✓ tag $TAG already on remote — release unchanged."
     echo "    To cut a new release, bump 'version:' in SKILL.md first."
     exit 0
 fi
 
+# Local tag exists but never made it to the remote → push it as-is.
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+    if git push origin "refs/tags/$TAG" 2>&1 | sed 's/^/  /'; then
+        echo "  ✓ pushed existing local tag $TAG"
+    else
+        echo "  ✗ pushing existing tag failed (commit push succeeded) — fix manually:"
+        echo "      git push origin $TAG"
+        exit 1
+    fi
+    exit 0
+fi
+
+# New version → create annotated tag, then push it.
 if git tag -a "$TAG" -m "Release $TAG" \
    && git push origin "refs/tags/$TAG" 2>&1 | sed 's/^/  /'; then
     echo "  ✓ tagged & pushed $TAG"

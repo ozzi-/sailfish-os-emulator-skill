@@ -1,7 +1,7 @@
 ---
 name: sailfish-os
 display-name: Sailfish OS
-version: 0.1.0
+version: 0.1.1
 description: "Sailfish OS emulator pipeline: install the SDK, build & deploy
   Harbour apps, and tap/swipe/screenshot to verify UI. Use for any Sailfish OS
   app work."
