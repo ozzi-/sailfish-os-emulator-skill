@@ -1,7 +1,7 @@
 ---
 name: sailfish-os
 display-name: Sailfish OS
-version: 0.1.1
+version: 0.1.2
 description: "Sailfish OS emulator pipeline: install the SDK, build & deploy
   Harbour apps, and tap/swipe/screenshot to verify UI. Use for any Sailfish OS
   app work."
@@ -93,6 +93,11 @@ logs, and verify the UI — without any physical phone or human in the loop.
 - **`sailjail` is broken on SDK images** (missing profile). Use `invoker` for
   app launch. (deploy.sh handles this automatically.)
 - **Network: internet-only.** LAN is blackholed. See SECURITY.md §2.
+- **Concurrent builds, same-basename app folders** (two sessions, e.g. two
+  `repo/` dirs) used to share ONE staging dir — a concurrent re-stage wiped
+  the in-flight build (missing QML resources, exit 255). Staging is now per
+  source path (`<name>-<hash>`, `scripts/lib-staging.sh`). Manual `sfdk build`
+  must hold the pipeline lock. (PIPELINE.md)
 - **Pipeline lock is MANDATORY for mutating ops** (emulator + build engine
   are shared by every Bionic session on this host): `tap.sh`, `swipe.sh`,
   `deploy.sh`, `apply-input.sh` refuse to run without `scripts/lock.sh hold`

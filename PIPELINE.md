@@ -45,9 +45,19 @@ falls back to the spec filename. See `scripts/lib-spec.sh` (unit-tested in
 > at install time, visible in `~/.config/SailfishSDK/libsfdk/buildengines.xml`
 > as `SharedSrc`). `sfdk build` refuses to run outside it. `deploy.sh`
 > handles this for you: apps outside the workspace are **staged as a clean
-> copy** under `$SHARED_SRC/.sfdk-staging/<app-name>` and built there (the
+> copy** under `$SHARED_SRC/.sfdk-staging/<app-name>-<12-hex>` (hash of the
+> app's canonical path — see `scripts/lib-staging.sh`) and built there (the
 > RPM appears next to that staged copy). Manual `sfdk build` must be run
-> from a directory inside the workspace.
+> from a directory inside the workspace — and under the pipeline lock, since
+> the build engine is shared.
+>
+> **Why the hash suffix (2026-11 incident):** two concurrent sessions built
+> apps from different folders that both happened to be named `repo`. The old
+> basename-only staging path meant they shared ONE staging dir — one
+> session's re-stage (`rm -rf` + copy) wiped the other's in-flight build
+> tree mid-build → binary with **missing QML resources**, app died with
+> **exit 255**. If you ever see that symptom again, first suspect a
+> concurrent build of a same-basename app folder.
 
 ## Phone build (aarch64 — the other target)
 

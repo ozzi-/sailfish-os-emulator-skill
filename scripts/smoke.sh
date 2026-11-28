@@ -112,6 +112,9 @@ shared_src_dir() {
     if [[ -n "$v" ]]; then printf '%s' "$v"; else printf '%s' "$HOME"; fi
 }
 
+# Staging path contract (shared with deploy.sh — single source of truth).
+source "$SCRIPTS_DIR/lib-staging.sh"
+
 # ═════════════════════════════════════════════════════════════
 # T0 — static (no VMs required)
 # ═════════════════════════════════════════════════════════════
@@ -343,6 +346,37 @@ t0_8_build_phone_dryrun() {
     return $rc
 }
 
+t0_9_staging_contract() {
+    # Regression (2026-11 incident): two sessions built apps from DIFFERENT
+    # folders that shared a basename (two `repo/` dirs). A basename-only
+    # staging path let one session's rm -rf wipe the other's in-flight build
+    # (missing QML resources, exit 255). The staging path must therefore be:
+    #   * unique per SOURCE LOCATION (same basename, different parents differ)
+    #   * deterministic (same dir -> same path; rebuilds + RPM lookup stable)
+    #   * still under <shared-src>/.sfdk-staging/
+    #   * computed by BOTH consumers (deploy.sh + smoke.sh) via the shared
+    #     helper — no inline re-derivation of the old basename-only form.
+    local rc=0 tmp a b sa sb sa2 pat
+    # basena[rme] matches the literal word 'basename' but NOT this pattern
+    # string itself (avoids the test grepping its own source and failing).
+    pat='sfdk-staging/\$(basena[rme]'
+    tmp="$(mktemp -d)"
+    a="$tmp/parent-a/repo"; b="$tmp/parent-b/repo"
+    mkdir -p "$a" "$b"
+    sa="$(sfos_staging_dir /fake-ssrc "$a")"
+    sb="$(sfos_staging_dir /fake-ssrc "$b")"
+    sa2="$(sfos_staging_dir /fake-ssrc "$a")"
+    [[ "$sa" != "$sb" ]] || { echo "same-basename dirs from different parents COLLIDE: $sa"; rc=1; }
+    [[ "$sa" == "$sa2" ]] || { echo "staging path not deterministic: $sa vs $sa2"; rc=1; }
+    [[ "$sa" == /fake-ssrc/.sfdk-staging/repo-* ]] || { echo "unexpected staging path: $sa"; rc=1; }
+    grep -q 'sfos_staging_dir' "$SCRIPTS_DIR/lib-staging.sh"  || { echo "lib-staging.sh does not define the helper"; rc=1; }
+    grep -q 'sfos_staging_dir' "$SCRIPTS_DIR/deploy.sh"       || { echo "deploy.sh does not use the shared helper"; rc=1; }
+    grep -qE "$pat" "$SCRIPTS_DIR/deploy.sh" && { echo "basename-only staging form still in deploy.sh"; rc=1; }
+    grep -qE "$pat" "$SCRIPTS_DIR/smoke.sh"  && { echo "basename-only staging form still in smoke.sh"; rc=1; }
+    rm -rf "$tmp"   # all checks set rc and fall through — cleanup always runs
+    return $rc
+}
+
 # ═════════════════════════════════════════════════════════════
 # T1 — live guest health (needs emulator + engine running)
 # ═════════════════════════════════════════════════════════════
@@ -436,9 +470,10 @@ t2_1_deploy() {
     out=$(timeout 600 bash "$SCRIPTS_DIR/deploy.sh" "$CANARY_DIR" --launch 2>&1) || {
         echo "deploy failed:"; sed 's/^/   /' <<<"$out" | tail -15; return 1; }
     # The RPM lands next to the BUILD dir — in-place (app inside the SDK
-    # workspace) or the staged copy (app outside it, deploy.sh stages it).
+    # workspace) or the staged copy (app outside it, deploy.sh stages it;
+    # staging path = shared helper, see scripts/lib-staging.sh).
     local shared_src="$(shared_src_dir)" rpm="" d
-    for d in "$CANARY_DIR" "$shared_src/.sfdk-staging/$(basename "$CANARY_DIR")"; do
+    for d in "$CANARY_DIR" "$(sfos_staging_dir "$shared_src" "$CANARY_DIR")"; do
         local r; r=$(ls -t "$d"/RPMS/*.rpm 2>/dev/null | head -1)
         [[ -n "$r" ]] && { rpm="$r"; break; }
     done
@@ -587,6 +622,7 @@ run_test T0.5 "lock contract (75-refusal, hold, minutes, auto-expire)" t0_5_lock
 run_test T0.6 "uninstall dry-run touches nothing; non-SFOS VMs safe" t0_6_uninstall_dryrun
 run_test T0.7 "spec parser resolves Name: literal/%define/filename"    t0_7_spec_parser
 run_test T0.8 "build-phone.sh --dry-run (name+version, docker plan)"  t0_8_build_phone_dryrun
+run_test T0.9 "staging path unique per source location, deterministic" t0_9_staging_contract
 
 if [[ "$RUN_T1" == 1 ]]; then
     echo

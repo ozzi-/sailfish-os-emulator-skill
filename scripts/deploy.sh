@@ -64,6 +64,7 @@ ALL_PERMISSIONS="array:string:${PERMISSIONS}"
 # Only run under a held pipeline lock (scripts/lock.sh hold).
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-lock.sh"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-spec.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-staging.sh"
 sfos_require_lock "deploy.sh"
 
 err()  { echo "ERROR: $*" >&2; exit 1; }
@@ -121,7 +122,10 @@ shared_src_dir() {
 BUILD_DIR="$APP_DIR"
 SSD="$(shared_src_dir)"
 if [[ "$APP_DIR" != "$SSD" && "$APP_DIR" != "$SSD"/* ]]; then
-    BUILD_DIR="$SSD/.sfdk-staging/$(basename "$APP_DIR")"
+    # Unique per SOURCE LOCATION (basename + hash of canonical path):
+    # concurrent sessions building same-basename folders (two `repo/`)
+    # must never share — or wipe — each other's staging dir.
+    BUILD_DIR="$(sfos_staging_dir "$SSD" "$APP_DIR")"
     rm -rf "$BUILD_DIR"
     mkdir -p "$BUILD_DIR"
     tar -C "$APP_DIR" --exclude=RPMS --exclude=.sfdk -cf - . | tar -C "$BUILD_DIR" -xf -
